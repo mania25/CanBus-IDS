@@ -395,6 +395,38 @@ class Model:
             end = timeit.default_timer()
             time.append(end - start)
         return time
+
+    def export(self, results_path, use_gpu=False):
+        if not self.is_build:
+            self.build()
+        init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
+        with tf.Session() as sess:
+            saver.restore(sess, save_path=tf.train.latest_checkpoint(results_path + '/Saved_models'))
+
+            # Define the signature for the SavedModel
+            inputs = {'input': tf.compat.v1.saved_model.utils.build_tensor_info(self.x_input_l)}
+            outputs = {'output': tf.compat.v1.saved_model.utils.build_tensor_info(self.output_label)}
+            print(inputs)
+            print(outputs)
+            signature_def = tf.compat.v1.saved_model.signature_def_utils.build_signature_def(
+                inputs=inputs,
+                outputs=outputs,
+                method_name=tf.compat.v1.saved_model.signature_constants.PREDICT_METHOD_NAME
+            )
+
+            # Build the SavedModel
+            builder = tf.compat.v1.saved_model.builder.SavedModelBuilder("car_ids_model")
+            builder.add_meta_graph_and_variables(
+                sess,
+                [tf.compat.v1.saved_model.tag_constants.SERVING],
+                signature_def_map={
+                    tf.compat.v1.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY: signature_def
+                }
+            )
+
+            # Save the SavedModel
+            builder.save()
                     
 if __name__ == '__main__':
     #python3 train.py --unknown_attack 'DoS' --model "CAAE" --batch_size 64 --is_train
@@ -415,5 +447,6 @@ if __name__ == '__main__':
         if args.res_path is None:
             print("Must define res_path which store model's weights")
         else:
+            model.export(args.res_path)
             model.test(args.res_path, unknown_test=False)
             model.test(args.res_path, unknown_test=True)
